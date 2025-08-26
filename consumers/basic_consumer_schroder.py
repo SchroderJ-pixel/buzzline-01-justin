@@ -1,63 +1,68 @@
 """
-basic_producer_schroder.py
-Emit fake social media comments about Taylor Swift getting engaged.
+basic_consumer_schroder.py
+Monitor streaming Taylor Swift engagement comments in real time.
+- Tails the project log file
+- Alerts on SCHRODER_ALERT lines
+- Tracks keyword mentions
+- Prints a quick summary every 10 comments
 """
 
-import os
+from __future__ import annotations
 import time
-import itertools
-import random
-from typing import Iterator
+import re
 from utils.utils_logger import logger, get_log_file_path
 
+ALERT_TOKEN = re.compile(r"\bSCHRODER_ALERT\b", re.IGNORECASE)
+KEYWORDS = {"engaged", "engagement", "fiancé", "wedding", "album", "love", "eras"}
+SUMMARY_EVERY = 10
 
-def get_message_interval() -> float:
-    """Interval between comments (default 1.5s)."""
-    return float(os.getenv("MESSAGE_INTERVAL_SECONDS", 1.5))
+def process_stream(log_path: str) -> None:
+    """Follow the log file and process new lines as they arrive."""
+    with open(log_path, "r", encoding="utf-8") as f:
+        f.seek(0, 2)  # go to end (like tail -f)
+        print("Consumer ready: monitoring comments...")
 
+        total = 0
+        keyword_hits = 0
 
-def schroder_comment_stream() -> Iterator[str]:
-    """
-    Generator yielding fake Taylor Swift engagement comments.
-    Every ~8th message includes a SCHRODER_ALERT keyword for demo alerts.
-    """
-    positive = [
-        "Omg I can’t believe Taylor is engaged!! 🥹💍",
-        "So happy for Taylor and her fiancé 💖",
-        "This is iconic, Taylor deserves the world 💕",
-        "Engagement era is here!!! ✨",
-    ]
-    skeptical = [
-        "I didn’t see this coming 👀",
-        "Hope the media doesn’t ruin this moment",
-        "This feels too sudden… anyone else?",
-        "Is this really true?",
-    ]
-    funny = [
-        "Time to start planning the Eras Wedding Tour 😂",
-        "Wonder if she’ll write ‘Love Story (Engaged Version)’",
-        "Bet this inspires 3 new albums 📀",
-    ]
+        while True:
+            line = f.readline()
+            if not line:
+                time.sleep(0.25)
+                continue
 
-    all_comments = positive + skeptical + funny
+            msg = line.strip()
+            if not msg:
+                continue
 
-    for i in itertools.count(1):
-        # About every 8th comment is “special”
-        if i % 8 == 0:
-            yield f"SCHRODER_ALERT: Viral comment spike detected at seq={i}"
-        else:
-            yield random.choice(all_comments)
+            total += 1
+            print(f"💬 {msg}")
 
+            if ALERT_TOKEN.search(msg):
+                print("🚨 VIRAL SPIKE ALERT! 🚨")
+                logger.warning(f"[ALERT] Viral spike detected -> {msg}")
+
+            lower = msg.lower()
+            if any(k in lower for k in KEYWORDS):
+                keyword_hits += 1
+                logger.info(f"[KEYWORD] {msg}")
+
+            if total % SUMMARY_EVERY == 0:
+                print("\n--- SUMMARY ---")
+                print(f"Total comments processed: {total}")
+                print(f"Keyword mentions:         {keyword_hits}")
+                print("----------------\n")
+                logger.info(f"[SUMMARY] total={total} keyword_hits={keyword_hits}")
 
 def main() -> None:
-    interval = get_message_interval()
+    logger.info("START consumer (schroder)...")
     log_path = get_log_file_path()
-    logger.info(f"[PRODUCER] Social comments every {interval}s -> {log_path}")
-
-    for comment in schroder_comment_stream():
-        logger.info(comment)
-        time.sleep(interval)
-
+    logger.info(f"Monitoring file: {log_path}")
+    try:
+        process_stream(log_path)
+    except KeyboardInterrupt:
+        print("User stopped the consumer.")
+    logger.info("END consumer (schroder).")
 
 if __name__ == "__main__":
     main()
